@@ -1,0 +1,137 @@
+---
+title: "Practice_RN_arid"
+output: html_document
+date: "2024-09-01"
+---
+
+##The aim of the following practice is that you answer some relevant questions that can be aproached using the data provided in RecruitNet to build a Recruitment network, using as an example the study site:
+
+
+##########################################################################################################
+# 1. Load the functions and that data
+##########################################################################################################
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+##############################################################################################################
+##2. extract from RecruitNet database the information from the study site:
+##############################################################################################################
+
+```{r}
+
+
+```
+
+
+##################################################################################################
+##3. Is the sample effort sufficient to reliable capture the structure of the interaction network?
+##################################################################################################
+
+
+
+```{r}
+
+```
+
+
+
+#################################################################################################################
+##4.1. Build a dataframe with the ineractions and their weights that you will use yo build your interaction network
+#################################################################################################################
+
+#Select the raw data about pair-wise interactions required in the format of "RecruitNet"
+
+
+```{r}
+
+
+```
+
+
+##################################################################################################
+# 5. How does your network looks like?
+##################################################################################################
+
+## 5.1. Represent the adjacency matrix using a heatmap (and weight each interaction by the density of recruitment per unit area of canopy species)
+
+
+```{r fig1, fig.height = 10, fig.asp = 0.9, warning=FALSE, message=FALSE}
+
+```
+
+
+## 5.2. Represent the network graph using igraph.
+
+
+```{r fig2, fig.height = 10, fig.asp = 1, warning=FALSE, message=FALSE}
+
+```
+
+
+
+
+#####################################################################################
+#6. Questions 
+#####################################################################################
+
+
+###############################
+#6.1.From the canopy perspective
+###############################
+
+##################################################################################################
+#6.1.1. Which species provide a higher canopy service (i.e. in recruitment networks )?
+##################################################################################################
+
+```{r}
+
+
+```
+
+##################################################################################################
+#6.1.2. Which species provide a more diverse canopy service (i.e. in recruitment networks )?
+##################################################################################################
+
+
+```{r}
+
+
+```
+
+
+###############################
+#6.2.From the recruit perspective
+###############################
+
+##################################################################################################
+#6.2.1. Which species have a broader recruitment niche (i.e. in recruitment networks )?
+##################################################################################################
+
+```{r}
+
+
+```
+
+############################################################
+#7.1. Which species could persist in the community over time?
+############################################################
+
+```{r}
+
+
+```
+
+############################################################
+#7.2. Out of all posible interactions, which of them actually occur
+#(i.e. does every species recruit under any other species)?
+############################################################
+
+```{r}
+
+
+```

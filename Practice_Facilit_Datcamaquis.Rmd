@@ -1,0 +1,160 @@
+---
+title: "Practice_Facilit_arid"
+output: html_document
+date: "2024-09-01"
+---
+
+##The aim of the following practice is that you answer some relevant questions that can be aproached using the data provided in RecruitNet to build a Facilitation network, using as an example the study site: Datcamaquis
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+##########################################################################################################
+# 1. Load the functions and that data
+##########################################################################################################
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+##############################################################################################################
+##2. extract from RecruitNet database the information from the study site:
+##############################################################################################################
+
+```{r}
+
+
+```
+
+
+##################################################################################################
+##3. Is the sample effort sufficient to reliable capture the structure of the interaction network?
+##################################################################################################
+
+
+
+```{r}
+
+```
+
+
+
+#################################################################################################################
+##4.2. Build a dataframe with the ineractions and their weights that you will use yo build your interaction network
+#################################################################################################################
+
+#Select the raw data about pair-wise interactions required in the format of "RecruitNet"
+
+
+```{r}
+
+
+```
+
+#4.2.1. Obtain the cover data for the canopy species (and Open) species in your study site
+#4.2.2. Remove those species lacking cover data 
+#4.2.3. Combine data on cover and interaction frequency, and summarize data by canopy-recruit pair across plots.
+
+
+```{r}
+
+```
+
+#4.2.4.Assess which interactions are significantly different from that expected based on the canopy and open cover 
+#4.2.4.1. Retain only facilitation interactions
+
+
+```{r}
+
+
+```
+
+#4.2.5. Add indices of interaction strength to those interactions significantly different from the expected values 
+#4.2.5.1 and assign 0 to the rest of interactions (no facilitation interactions) and two other weights "Dcr"and "Icr"
+
+```{r}
+
+
+```
+
+##4.2.6. remove species with non-significant positive interactions
+
+```{r}
+
+```
+
+
+##################################################################################################
+# 5. How does your network looks like?
+##################################################################################################
+
+## 5.1. Represent the adjacency matrix using a heatmap (and weight each interaction by the density of recruitment per unit area of canopy species)
+
+
+```{r fig1, fig.height = 10, fig.asp = 0.9, warning=FALSE, message=FALSE}
+
+```
+
+
+## 5.2. Represent the network graph using igraph.
+
+
+```{r fig2, fig.height = 10, fig.asp = 1, warning=FALSE, message=FALSE}
+
+```
+
+
+#####################################################################################
+#6. Questions 
+#####################################################################################
+
+###############################
+#6.1. From the canopy perspective
+###############################
+
+##################################################################################################
+#6.1.1. Which species are better nurses (in recruitment enhancement(facilitation) networks?
+##################################################################################################
+
+```{r}
+
+
+```
+
+#####################################################################################################################
+#6.1.2. Which nurse species' hold a higher diversity of recruit species (in recruitment enhancement(facilitation) networks?
+#####################################################################################################################
+
+```{r}
+
+
+```
+
+###############################
+#6.2.From the recruit perspective
+###############################
+
+##################################################################################################
+#6.2.1. Which recruit species benefit from more nurses'species (in recruitment enhancement(facilitation) networks?
+##################################################################################################
+
+```{r}
+
+
+```
+
+#####################################################################################
+# 8.1. Is there some non-random pattern of interactions in the the observed facilitated and competition networks, such as nestedness?
+#(i.e. specialist species tend to interact with generalist species)?
+#####################################################################################
+
+```{r}
+
+
+```

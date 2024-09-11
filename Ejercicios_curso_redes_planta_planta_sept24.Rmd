@@ -1,0 +1,701 @@
+---
+title: "Ejercicios Redes planta-planta"
+output: html_document
+date: "2024-07-18"
+---
+
+library(igraph)
+library(ggplot2)
+library(visNetwork)
+library(iNEXT)
+library(vegan)
+library(bipartite)
+#install.packages ("picante")
+library(picante)
+
+
+# Introduction to the RecruitNet database.
+
+The RecruitNet is a dataset containing information on plant-plant recruitment interactions in 143 local plant communities (Study sites) from 23 countries across five continents, including temperate and tropical ecosystems. Each network provides information on the number of individuals of every "recruit" species recruiting in the proximity of every "canopy" species or away from other plants (in so called "open" interspaces). The data set includes more than 850000 recruiting individuals involved in 87924 different canopy-recruit pairs among 3186 vascular plant species. The cover of canopy species and open ground is also provided. It was published as a data paper by Verdu et al. (2023)^1^ and can be downloaded from:
+
+https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3923
+
+^1^*Verdú, M., Garrido, J. L., Alcantara, J. M., Montesinos‐Navarro, A., Aguilar, S., Aizen, M. A., ... & Zamora, R. (2023). RecruitNet: A global database of plant recruitment networks. Ecology 104(2):e3923.*
+
+##The objectives of the following script is to guide the user to answer specific questions related with the structure of plant-plant interactions in a given comunity. 
+Two types of interactions will be assessed, recruitment interaction and recruitment enhancement (facilitation) or depression (competition) interactions. Before starting, it is always a good idea to familiarize with the contents of the dataset by reading the Metadata file provided with the paper.
+
+
+```{r setup, include=FALSE}
+# Set up your working directory where you have saved the functions (RecruitNetP_Santiago.R)
+# and the input data will be downloaded
+your_path<-"~/Documents/GitHub/recruitment_networks"
+setwd(your_path)
+
+```
+
+
+##########################################################################################################
+# 1. Load the functions and that data
+##########################################################################################################
+
+## load all the functions of the package RecruitnetP from the file provided (RecruitNetP_Santiago.R)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source('RecruitNetP_Santiago2.R') # This loads the functions of the package
+```
+
+##load the two datasets available in the previoulsly mentioned paper: 
+"RecruitNet" with the plant-plant interactions and "CanopyCover" with the relative percentage of cover of each canopy species in each study site, respectively. 
+
+# If you prefer to input your data make sure the format matches that in the two databases:
+
+1.For the first database (**"RecruitNet"**) with the plant-plant interactions, it must contain at least, the raw data of the observed frequency of each canopy-recruit pair in each sampling unit (e.g. plot, quadrat, transect). For standardization, the columns in this data set must be named:
+  - **Plot**. Plot ID.
+  - **Canopy**. Name of the canopy species, including "Open" interspaces. If you use full scientific names, concatenate the epithets with a lower dash. (e.g. Olea_europaea). 
+  - **Recruit**. Name of the recruit species. If you use full scientific names, concatenate the epithets with a lower dash. (e.g. Olea_europaea).
+  - **Frequency**. Frequency of the canopy-recruit interaction in the study plot, indicated as number of individuals of the recruit species found under individuals of the canopy species.
+
+2. For the second database (**"CanopyCover"**) it must contain the abundance of each canopy species in each plot. The minimum columns required are:
+
+  - **Plot**. As in the interactions data set.
+  - **Canopy**. As in the interactions data set.
+  - **Cover**. Cover of the canopy species (and "Open" interspaces), measured as % of the total area sampled of each canopy plant species (or "Open"). For example, following Alcantara et al. (2019), in plants with branches less than 1.5m above ground, (e.g. small shrubs and treelets), it would be the area of projection of their canopy on the ground, while in tall trees it can be the area extending 0.5m around the trunk's base or large surfacing roots.
+  - **Sampled_distance_or_area**. Total area of each plot. 
+
+Both data sets can contain any other columns with ancillary information.  
+
+```{r warning=FALSE, message=FALSE}
+# Download latest version of the RecruitNet databases (Verdú et al. 2023; doi:10.1002/ecy.3923).
+#this function will download the two datasets in a .csv fromat in your_path
+download_RN() # Run only the first time you use the package.
+
+# Load the two databases in the R working directory, and name them: RecruitNet and CanopyCover
+RecruitNet <- read.csv("RecruitNet.csv")
+CanopyCover <- read.csv("CanopyCover.csv")
+
+```
+
+##The functions provided take data from individual study sites. 
+You can provide your own interaction (**"RecruitNet"**) and cover (**"CanopyCover"**) data sets or you can use data from one of the study sites available in RecruitNet and CanopyCover data sets. In this example, we will analyse the recruitment network from Ventisquero (available in RecruitNet), so the first step will be creating the data frames from RecruitNet and CanopyCover data set.
+
+##############################################################################################################
+##2. extract from RecruitNet database the information from one of the study sites ( in this exampe "Vetisquero")
+##############################################################################################################
+
+```{r pressure, echo=FALSE}
+Ventisquero_com <- comm_subset(RecruitNet, site = "Ventisquero")
+Ventisquero_cov <- comm_subset(CanopyCover, site = "Ventisquero")
+head(Ventisquero_com)
+head(Ventisquero_cov)
+```
+
+##################################################################################################
+##3. Is the sample effort sufficient to reliable capture the structure of the interaction network?
+##################################################################################################
+
+Before going into further analyses, it is good practice to assess whether your data is representative of the canopy-recruit interactions that would be expected to occur in the study site. To this end, we can check the completeness and coverage of the sampled interactions. If your data are structured in plots, it is good practice to use the "incidence" approach, but the "abundance" approach can be used more generally, so it is interesting for comparative purposes.
+
+Link coverage can be assessed using the procedure proposed by Chao et al., (2014) to determine the completeness of the estimated species richness in field surveys (implemented in the R package iNEXT; Hsieh, Ma & Chao, 2016). In RNs, link coverage measures the probability that the next pair of canopy-recruit individuals detected in a survey belongs to a pair of species that has
+already been recorded. With coverage values close to 1, the canopy-recruit pairs that remain to be found will be those that occur at very low frequency in the community, so their contribution to most network properties is likely to be very small.
+
+Chao, A., Gotelli, N. J., Hsieh, T. C., Sander, E. L., Ma, K. H., Colwell, R. K. & Ellison, A. M.(2014). Rarefaction and extrapolation with Hill numbers: a framework for sampling and estimation in species diversity studies. Ecological Monographs 84, 45-67
+
+Hsieh, T. C., Ma, K. H. & Chao, A. (2016). iNEXT: an R package for rarefaction and extrapolation of species diversity (H ill numbers). Methods in Ecology and Evolution 7, 1451-1456.
+
+```{r pressure, echo=FALSE}
+link_completeness(Ventisquero_com, "abundance")
+```
+
+This table indicates that we found 78.3% of the canopy-recruit pairs that are expected to occur in the study site (299 out of an estimated number of 381 links). Nevertheless, the frequency of the missing interactions should be extremely low since the probability of detecting a new canopy-recruit pair if we were to sample one more recruit would be 0.015 (1-0.985).
+
+##############################################################
+##4. Which plant-plant interaction are you interested in?
+##############################################################
+
+Build the interaction network based on a) recruitment interactions or B)recruitment enhancement (facilitation)/depression (competition) interactions
+
+#4.1. A) Recruitment interactions ( i.e. under which canopies do you see any recruit of a given species)
+
+```{r pressure, echo=FALSE}
+#The raw data in the format of "RecruitNet" needs no further management to build the recruitment interactions
+Ventisquero_int <- comm_subset(RecruitNet, "Ventisquero")
+Ventisquero_int
+```
+
+#4.2. B) Recruitment enhancement (facilitation)/depression (competition) interactions (i.e. under which canopies the density of recruits is enhanced or depressed compared to the Open. 
+This approach takes into consideration the expected density based on the % of cover of each canopy (and the Open) and the matrix is built after a significance test has shown that the recruitment is enhanced or depressed more than expected by the relative abundances). In order to prepare the database with the interactions from the raw data you need to go through the following 1-6 steps.
+
+```{r pressure, echo=FALSE}
+#The raw data in the format of "RecruitNet" needs further management to build the recruitment enhancement (facilitation) or depressing (competition) interactions:
+
+#4.2.1. Obtain the cover data for the canopy species (and Open) species in the study site
+Ventisquero_cov <- comm_subset(CanopyCover, site = "Ventisquero")
+
+#4.2.2. Filter Ventisquero_int to remove species lacking cover data 
+Ventisquero_int <- comm_subset(RecruitNet, "Ventisquero")
+Ventisquero_int2 <- remove_no_cover(Ventisquero_int, Ventisquero_cov)
+
+#4.2.3. Combine data on cover and interaction frequency, and summarize data by canopy-recruit pair across plots.
+Ventisquero_RNc <- comm_to_RN(Ventisquero_int2, Ventisquero_cov)
+Ventisquero_RNc
+```
+
+IMPORTANT: The data frames "Ventisquero_int", "Ventisquero_int2" and "Ventisquero_RNc" are the ones required for the analyses, so it is important to understand their contents and differences:
+
+- **Ventisquero_int** (i.e. the output of function *comm_subset*) contains all the species and interactions observed (i.e. with frequency > 0) in the study site dissaggregated by plots. It contains all the variables available in the original data source (RecruitNet.csv in this example).
+
+- **Ventisquero_int2** is the same as Ventisquero_int except that species lacking cover data are removed  (i.e. Ventisquero_int filtered with function *remove_no_cover*).
+
+- **Ventisquero_RNc** (i.e. the output of function *comm_to_RN*) takes the previous data frame and combines the data on interaction frequency and cover across plots. It contains only those species for which data on cover was available and all the possible interactions between them, so there are interactions with frequency = 0. It contains only variables of interaction frequency and species abundance. It calculates several weight options for each interaction:
+- **Fcr**: frequency of recruitment in number of recruits by canopy-recruit pair.
+- **Dcr**: density of recruitment as number of recruits per unit area of canopy species.
+- **Icr**: incidence of the interaction as number of plots where it was observed.
+- **Pcr**: presence/absence (1/0) of the interaction in the study site. This provides the "unweighted" version of the adjacency matrix.
+And provides:
+- **Ac**: The % cover occupied by the canopy species.
+- **Ar**: The % cover occupied by the recruit species.
+
+It is important to keep these differences in mind because some functions will give different results depending on whether you use one data set or the other, and different functions may require different data.
+
+### Interaction sign and significance
+
+To assess whether recruitment is more likely under a given canopy species than in open, we can use the exact binomial test or a chi square test (if the number of recruits is large enough so that the expected frequencies are larger than 5). Applied to recruitment interactions, the tests address the null hypothesis that recruitment under the canopy species and in Open occurs according to the relative cover of the canopy and Open. Thus, we use these tests as a goodness-of-fit tests. The logic is that, if recruitment were neutral regarding the microhabitat, we would observe that the number of recruits under canopy and in open would be exactly proportional to the relative cover of each microhabitat. If the null hypothesis is rejected, we would conclude that recruitment is affected (enhanced or depressed) by the canopy species compared with the prospects of recruitment when seeds are dispersed away from canopy plants (i.e. to open interspaces).
+
+When the exact binomial test is applied to canopy-recruit pairs with very low number of recruits, it may be impossible to reject the null hypothesis even if all the recruits occurred in the less likely microhabitat. In such cases, one might conclude that the interaction has a neutral effect when it is actually not possible to reach a conclusion. We classify these cases as "not testable". Testability indicates the smallest p-value that a binomial test will estimate based in a given number of recruits. If this p-value is above the reference p-value (typically 0.05), then you have too few cases (number of recruits) to ever reject the null hypothesis.
+
+The "int_significance" function conducts the tests and provides results indicating whether the effect of the canopy species on recruitment is enhancing (i.e. positive), depressing (i.e. negative), neutral or could not be tested due to low sample size.
+
+```{r fig.height = 10, fig.width = 20, warning=FALSE, message=FALSE}
+#4.2.4.Assess which interactions are significantly different from that expected based on the canopy and open cover
+#By determining which interactions have enhancing effects on recruitment, we can subset the recruitment network to #those canopy-recruit interactions that represent facilitation or competition. 
+
+
+#4.2.4.1 Recruitment enhancement (facilitation) 
+#Assess which interactions are significantly different from that expected based on the canopy and open cover
+facil_df <- int_significance(Ventisquero_RNc)
+
+# and modify the data set to retain only facilitation interactions, and assign 0 ( i.e. non-facilitative interaction) to the non-significant ones
+facil_df$FacilCR <- facil_df$Fcr
+facil_df$FacilFRO <- facil_df$Fro
+for(i in 1:dim(facil_df)[1]) {
+  facil_df$FacilCR[i] <- ifelse(facil_df$Effect_int[i] =="Enhancing", facil_df$Fcr[i], 0)
+  facil_df$FacilFRO[i] <- ifelse(facil_df$Effect_int[i] =="Enhancing", facil_df$Fro[i], 0)
+}
+
+facil_df$Fcr<-facil_df$FacilCR
+facil_df$FacilCR<-NULL
+
+facil_df$Fro<-facil_df$FacilFRO
+facil_df$FacilFRO<-NULL
+
+#4.2.4.2 Recruitment depression (competition)
+#similarly you can also retain only competition interactions
+comp_df <- int_significance(Ventisquero_RNc)
+comp_df$CompCR <- comp_df$Fcr
+comp_df$CompFRO <- comp_df$Fro
+
+for(i in 1:dim(comp_df)[1]) {
+  comp_df$CompCR[i] <- ifelse(comp_df$Effect_int[i] =="Depressing", comp_df$Fcr[i], 0)
+  comp_df$CompFRO[i] <- ifelse(comp_df$Effect_int[i] =="Depressing", comp_df$Fro[i], 0)
+}
+
+comp_df$Fcr<-comp_df$CompCR
+comp_df$CompCR<-NULL
+
+comp_df$Fro<-comp_df$CompFRO
+comp_df$CompFRO<-NULL
+
+```
+
+### Interaction strength
+
+Besides the sign and significance, an interaction can be characterized by its strength: how much recruitment is affected by the canopy species relative to the species performance in the absence of canopy plants (i.e. in open). There exist several indices of interaction strength, each with its own particularities. In the context of recruitment interactions, the most frequently used index is the **Relative Interaction Index** (*RII*; Armas et al., 2004), and some studies have recently used the **additive and commutative symmetry intensity indices** (*NIntA* and *NIntC*) proposed by Diaz-Sierra et al. (2017). However, these indices are not well suited for comparisons of interaction strength between pairs of species within a local community, so the **Normalized Neighbour Suitability** index (*Ns*; Mingo, 2014) should be preferred (Alcantara et al. 2025?). In any case, the function "associndex" calculates all the four indices.
+
+```{r}
+#4.2.5. Add indices of interaction strength to those interactions significantly different from the expected values based on canopy and open cover
+Ventisquero_RNc <- comm_to_RN(Ventisquero_int2, Ventisquero_cov)
+b <- associndex(Ventisquero_RNc)
+b<-b[,c("Canopy","Recruit","Ns","NintC","NintA","RII")]
+
+#4.2.5.1 Add indices of interaction strength to the retained facilitation interactions and assign 0 to the rest (no facilitation interactions)
+facil_df<-merge(facil_df, b, by=c("Canopy","Recruit"))
+
+facil_df$FacilNS <- facil_df$Ns
+facil_df$FacilNINTC <- facil_df$NintC
+facil_df$FacilNINTA <- facil_df$NintA
+facil_df$FacilRII2 <- facil_df$RII
+
+for(i in 1:dim(facil_df)[1]) {
+  facil_df$FacilNS[i] <- ifelse(facil_df$Effect_int[i] =="Enhancing", facil_df$Ns[i], 0)
+  facil_df$FacilNINTC[i] <- ifelse(facil_df$Effect_int[i] =="Enhancing", facil_df$NintC[i], 0)
+  facil_df$FacilNINTA[i] <- ifelse(facil_df$Effect_int[i] =="Enhancing", facil_df$NintA[i], 0)
+  facil_df$FacilRII2[i] <- ifelse(facil_df$Effect_int[i] =="Enhancing", facil_df$RII[i], 0)
+  }
+
+facil_df$Ns<-facil_df$FacilNS
+facil_df$FacilNS<-NULL
+
+facil_df$NintC<-facil_df$FacilNINTC
+facil_df$FacilNINTC<-NULL
+
+facil_df$NintA<-facil_df$FacilNINTA
+facil_df$FacilNINTA<-NULL
+
+facil_df$RII<-facil_df$FacilRII2
+facil_df$FacilRII2<-NULL
+
+#and other potentially useful weights for interactions: "Dcr"*: density of recruitment as number of recruits per unit area of canopy species, and "Icr": incidence of the interaction as number of plots where it was observed.
+facil_df<-merge(facil_df, Ventisquero_RNc[,c("Canopy","Recruit", "Icr", "Pcr")], by=c("Canopy","Recruit"))
+
+facil_df$FacilICR <- facil_df$Icr
+facil_df$FacilPCR <- facil_df$Pcr
+
+for(i in 1:dim(facil_df)[1]) {
+  facil_df$FacilICR[i] <- ifelse(facil_df$Effect_int[i] =="Enhancing", facil_df$Icr[i], 0)
+  facil_df$FacilPCR[i] <- ifelse(facil_df$Effect_int[i] =="Enhancing", facil_df$Pcr[i], 0)
+  }
+
+facil_df$Icr<-facil_df$FacilICR
+facil_df$FacilICR<-NULL
+
+facil_df$Pcr<-facil_df$FacilPCR
+facil_df$FacilPCR<-NULL
+
+
+#4.2.5.2 We repeat the same for recruitment depression (competition) networks. 
+
+comp_df<-merge(comp_df, b, by=c("Canopy","Recruit"))
+
+comp_df$CompNS <- comp_df$Ns
+comp_df$CompNINTC <- comp_df$NintC
+comp_df$CompNINTA <- comp_df$NintA
+comp_df$CompRII2 <- comp_df$RII
+
+for(i in 1:dim(comp_df)[1]) {
+  comp_df$CompNS[i] <- ifelse(comp_df$Effect_int[i] =="Depressing", comp_df$Ns[i], 0)
+  comp_df$CompNINTC[i] <- ifelse(comp_df$Effect_int[i] =="Depressing", comp_df$NintC[i], 0)
+  comp_df$CompNINTA[i] <- ifelse(comp_df$Effect_int[i] =="Depressing", comp_df$NintA[i], 0)
+  comp_df$CompRII2[i] <- ifelse(comp_df$Effect_int[i] =="Depressing", comp_df$RII[i], 0)
+  }
+
+comp_df$Ns<-comp_df$CompNS
+comp_df$CompNS<-NULL
+
+comp_df$NintC<-comp_df$CompNINTC
+comp_df$CompNINTC<-NULL
+
+comp_df$NintA<-comp_df$CompNINTA
+comp_df$CompNINTA<-NULL
+
+comp_df$RII<-comp_df$CompRII2
+comp_df$CompRII2<-NULL
+
+#add other useful weights
+
+comp_df<-merge(comp_df, Ventisquero_RNc[,c("Canopy","Recruit", "Icr", "Pcr")], by=c("Canopy","Recruit"))
+
+
+comp_df$CompICR <- comp_df$Icr
+comp_df$CompPCR <- comp_df$Pcr
+
+for(i in 1:dim(comp_df)[1]) {
+  comp_df$CompICR[i] <- ifelse(comp_df$Effect_int[i] =="Depressing", comp_df$Icr[i], 0)
+  comp_df$CompPCR[i] <- ifelse(comp_df$Effect_int[i] =="Depressing", comp_df$Pcr[i], 0)
+  }
+
+comp_df$Icr<-comp_df$CompICR
+comp_df$CompICR<-NULL
+
+comp_df$Pcr<-comp_df$CompPCR
+comp_df$CompPCR<-NULL
+
+```
+
+
+### Remove species of recruits and canopy without any significant interaction
+
+we will do it separately for recruit enhancement (facilitation) and recruit depression (competition)
+
+
+```{r warning=FALSE, message=FALSE}
+##4.2.6. remove species with non-significant interactions 
+
+#4.2.6.1. for facilitation interactions
+library(picante)
+
+#obtain the row facilitation matrix
+facilit_RN <-as.matrix(sample2matrix(facil_df[,c("Recruit", "Fcr", "Canopy")]))
+# and select only those rows and columns with at least one significant interaction
+my_recruit_f<-rownames(facilit_RN[rowSums(facilit_RN)>0,])
+my_canopy_f<-colnames(facilit_RN[,colSums(facilit_RN)>0])
+
+facil_df<-facil_df[facil_df$Recruit%in%my_recruit_f & facil_df$Canopy%in%my_canopy_f,]
+facilit_RN<-facilit_RN[rowSums(facilit_RN)>0,colSums(facilit_RN)>0]
+
+#4.2.6.2. for competition interactions
+
+comp_RN <-as.matrix(sample2matrix(comp_df[,c("Recruit", "Fcr", "Canopy")]))
+# and select only those rows and columns with at least one significant interaction
+my_recruit_c<-rownames(comp_RN[rowSums(comp_RN)>0,])
+my_canopy_c<-colnames(comp_RN[,colSums(comp_RN)>0])
+
+comp_df<-comp_df[comp_df$Recruit%in%my_recruit_c & comp_df$Canopy%in%my_canopy_c,]
+
+comp_RN<-comp_RN[rowSums(comp_RN)>0,colSums(comp_RN)>0]
+
+head(facil_df)
+head(comp_df)
+
+```
+
+##################################################################################################
+# 5. How does the network I am interested in looks like?
+#(i.e. recruitment or recruitment enhancement(facilitation)/depression (competition))
+##################################################################################################
+
+I bet you are all eager to display your network (either a recruitment or a facilitation/ competition network). There are two general ways of doing it: representing the adjacency matrix or representing the network graph.
+
+## 5.1 The adjacency matrix
+
+The RN_heatmap function provides a simple heatmap representation of the matrix where cells are colored according to some weight variable. Weight options are:
+- **Fcr**: frequency of recruitment in number of recruits by canopy-recruit pair.
+- **Dcr**: density of recruitment as number of recruits per unit area of canopy species.
+- **Icr**: incidence of the interaction as number of plots where it was observed.
+- **Pcr**: presence/absence (1/0) of the interaction in the study site. This provides the "unweighted" version of the adjacency matrix. 
+
+The rows and columns are ordered with "Open" in first place and the species in alphabetical order.
+For improved visualization in R-markdown, you can try to change the chunk settings.
+
+#5.1.1 For the recuitment network
+
+```{r fig1, fig.height = 10, fig.asp = 0.9, warning=FALSE, message=FALSE}
+
+Ventisquero_int <- comm_subset(RecruitNet, "Ventisquero")
+Ventisquero_cover <- comm_subset(CanopyCover, "Ventisquero")
+Ventisquero_RN <- comm_to_RN(Ventisquero_int, Ventisquero_cover)
+
+RN_heatmap(Ventisquero_RN, weight_var = "Dcr", scale_top = 0.06)
+
+```
+
+#5.1.2 For the recruitment enhancement (facilitation) or depression (competition) networks
+#5.1.2.1 For the facilitation network
+The function RN_heatmap_non_sq is a slight modification of the function RN_heatmap_non_sq that handles non square matrices 
+
+```{r fig1, fig.height = 10, fig.asp = 0.9, warning=FALSE, message=FALSE}
+
+RN_heatmap_non_sq(facil_df, weight_var = "Dcr", scale_top = 0.06)
+
+```
+
+#5.1.2.2 For the competition network
+
+```{r fig1, fig.height = 10, fig.asp = 0.9, warning=FALSE, message=FALSE}
+
+RN_heatmap_non_sq(comp_df, weight_var = "Dcr", scale_top = 0.06)
+
+```
+
+## 5.2. The network graph.
+
+Most of this package relies on igraph to both visualize and analize the network. We can use the RN matrix as an adjacency matrix and use the utilities of this package to obtain a visualization of the network.
+
+#5.2.1. For the recuitment network
+
+```{r fig2, fig.height = 10, fig.asp = 1, warning=FALSE, message=FALSE}
+library(igraph)
+
+RN_igraph <- graph_from_adjacency_matrix(
+  t(RN_to_matrix(Ventisquero_RN, weight = "Pcr")), mode = "directed") # We need to transpose the adjacency matrix so that arrows point from canopy to recruit when represented in igraph.
+plot(RN_igraph, 
+     edge.arrow.size=.5, 
+     vertex.color="chartreuse", 
+     vertex.size=8, 
+     vertex.frame.color="darkolivegreen", 
+     vertex.label.color="black", 
+     vertex.label.cex=0.8, 
+     vertex.label.dist=2,
+     vertex.label.font = 3,
+     edge.curved=0.2,
+     layout=layout_with_kk(RN_igraph),
+     frame = TRUE)
+
+```
+
+#5.2.2.For the recruitment enhancement (facilitation) or depression (competition) networks
+#5.2.2.1.For the facilitation network
+
+#you can Use the package "bipartite" for plotting the facilitation network
+
+```{r fig2, fig.height = 10, fig.asp = 1, warning=FALSE, message=FALSE}
+library(bipartite)
+
+facilit_RN <-as.matrix(sample2matrix(facil_df[,c("Recruit", "Fcr", "Canopy")]))
+
+plotweb(sortweb(facilit_RN, sort.order="dec"), method="normal", text.rot = 90, labsize = 2,
+        y.width.low = 0.05, y.width.high=0.05, ybig=1.2,
+        col.high = "#E69F00", col.low = "#0072B2",
+        y.lim= c(-1,3)
+          )
+
+
+```
+
+#5.2.2.2.For the competition network
+# you can use the package "bipartite"
+
+```{r fig2, fig.height = 10, fig.asp = 1, warning=FALSE, message=FALSE}
+library(bipartite)
+comp_RN <- as.matrix(sample2matrix(comp_df[,c("Recruit", "Fcr", "Canopy")]))
+
+plotweb(sortweb(comp_RN, sort.order="dec"), method="normal", text.rot = 90, labsize = 2,
+        y.width.low = 0.05, y.width.high=0.05, ybig=1.2,
+        col.high = "#E69F00", col.low = "#0072B2",
+        y.lim= c(-1,3)
+          )
+
+```
+
+The visualization of networks can be beautiful and portray nicely their level of complexity, but I bet you now realize that such visualizations can hardly provide any insight about any properties of the network or their nodes and links.
+
+
+#####################################################################################
+#6. Questions that can be answered with every type of plant-plant interactions networks
+#####################################################################################
+
+###############################
+#6.1. From the canopy perspective
+###############################
+
+##################################################################################################
+# 6.1.1. Which species provide a higher canopy service (i.e. in recruitment networks )?(regardless recruit sp)
+#or are better nurses (in recruitment enhancement(facilitation) networks?(regardless recruit sp)
+#or more competitive (in recruitment depression (competition)networks)?(regardless recruit sp)
+##################################################################################################
+
+#Recruitment networks: Which species (or microhabitat) provide a higher canopy service? 
+```{r}
+Ventisquero_RN <- comm_to_RN(Ventisquero_int, Ventisquero_cov)
+Ventisquero_RN_mat<-RN_to_matrix(Ventisquero_RN)
+Ventisquero_RN_mat_bin<-ifelse(Ventisquero_RN_mat>0,1,0)
+sort(colSums(Ventisquero_RN_mat_bin),dec=T)
+
+```
+
+The species that provides a higher canopy service are Quercus_ilex, Quercus_faginea, Juniperus_oxycedrus, Pistacia_terebinthus, although it can be conditioned by the % of cover of each canopy species. In addition, it is also remarkable that there is a high recruitment in open. 
+
+#Facilitation networks: Which nurse species benefit a higher number of recuits' species (i.e.enhance recruitment)?
+```{r}
+# obtain the facilitation matrix "facilit_RN" from the above section 4 (steps 1 to 6).
+
+Ventisquero_Fac_mat_bin<-ifelse(facilit_RN>0,1,0)
+sort(colSums(Ventisquero_Fac_mat_bin),dec=T)
+```
+The nurse species that benefit a higher number of recruits' species are Quercus_ilex,Pistacia_terebinthus,Juniperus_oxycedrus,Crataegus_monogyna, which do not necessarily match the canopy species that provides a higher canopy service shown in the previous analysis. This show that the ecological processes studied in each case are different, and the differences can be due to the fact that in in this case the relative abundance of the nurse species has been taken into account. 
+
+#Competition networks: Which species depress more the recruitment?
+```{r}
+Ventisquero_comp_mat_bin<-ifelse(comp_RN>0,1,0)
+sort(colSums(Ventisquero_comp_mat_bin),dec=T)
+
+```
+Quercus_ilex  Crataegus_monogyna Phillyrea_latifolia 
+
+##################################################################################################
+# 6.1.2. Which species provide a more diverse canopy service (i.e. in recruitment networks )?
+#or Which nurse hold a higher diversity of recruit species (in recruitment enhancement(facilitation) networks?
+#or Which species depress the establishment of (compete with) a higher diversity of recruit species (in recruitment depression (competition)networks)?
+##################################################################################################
+
+#Recruitment networks: Which species provide a more diverse canopy service? 
+```{r}
+
+# Function to calculate Shannon index
+shannon_index <- function(row) {
+  p <- row / sum(row)  # Proportion of each element
+  p <- p[p > 0]  # Remove zero values to avoid NaNs in log
+  -sum(p * log(p))  # Shannon index formula
+}
+
+# Apply function to each row
+shannon_indices_RN <- apply(Ventisquero_RN_mat, 2, shannon_index)
+
+sort(shannon_indices_RN, dec=T)
+
+```
+
+Open     Phillyrea_latifolia            Quercus_ilex         Quercus_faginea
+
+#Facilitation networks: Which nurse hold a higher diversity of recruit species?
+```{r}
+
+shannon_index <- function(row) {
+  p <- row / sum(row)  # Proportion of each element
+  p <- p[p > 0]  # Remove zero values to avoid NaNs in log
+  -sum(p * log(p))  # Shannon index formula
+}
+
+# Apply function to each row
+shannon_indices_Fac <- apply(facilit_RN, 2, shannon_index)
+
+sort(shannon_indices_Fac, dec=T)
+
+
+```
+
+ Quercus_ilex    Pistacia_terebinthus                Rosa_sp1      Crataegus_monogyna
+
+#Competition networks: Which species depress the establishment of a higher diversity of recruit species?
+```{r}
+
+shannon_index <- function(row) {
+  p <- row / sum(row)  # Proportion of each element
+  p <- p[p > 0]  # Remove zero values to avoid NaNs in log
+  -sum(p * log(p))  # Shannon index formula
+}
+
+# Apply function to each row
+shannon_indices_comp <- apply(comp_RN, 2, shannon_index)
+
+sort(shannon_indices_comp, dec=T)
+
+```
+
+Quercus_ilex  
+
+###############################
+#6.2. From the recruit perspective
+###############################
+
+##################################################################################################
+# 6.2.1. Which species have a broader recruitment niche (i.e. in recruitment networks )?
+#or Which recruit species benefit from more nurses'species (in recruitment enhancement(facilitation) networks?
+#or Which recruit species are sentitive to more competitor species (in recruitment depression (competition)networks)?
+##################################################################################################
+
+#Recruitment networks: Which species have a broader recruitment niche? 
+```{r}
+Ventisquero_RN <- comm_to_RN(Ventisquero_int, Ventisquero_cov)
+Ventisquero_RN_mat<-RN_to_matrix(Ventisquero_RN)
+Ventisquero_RN_mat_bin<-ifelse(Ventisquero_RN_mat>0,1,0)
+sort(rowSums(Ventisquero_RN_mat_bin),dec=T)
+
+```
+Recruit species: Quercus_faginea      Crataegus_monogyna     Phillyrea_latifolia            Quercus_ilex 
+
+#Facilitation networks: Which recruit species benefit from more nurses'species?
+```{r}
+Ventisquero_Fac_mat_bin<-ifelse(facilit_RN>0,1,0)
+sort(rowSums(Ventisquero_Fac_mat_bin),dec=T)
+
+```
+Beneficiaries: Phillyrea_latifolia      Crataegus_monogyna         Quercus_faginea
+
+#Competition networks: Which recruit species are sentitive to more competitor species?
+```{r}
+Ventisquero_comp_mat_bin<-ifelse(comp_RN>0,1,0)
+sort(rowSums(Ventisquero_comp_mat_bin),dec=T)
+
+```
+sensitive recruit species: Crataegus_monogyna       Quercus_ilex  Thymus_mastichina
+
+
+#####################################################################################
+# 7. Questions that can be answered with Recruitment interactions networks
+#####################################################################################
+
+############################################################
+# 7.1. Which species could persist in the community over time?
+############################################################
+
+### Functional topology
+
+Alcantara & Rey (2012) derived a qualitative way to infer potential species persistence from their position in the RNs based on a combination of non-negative matrix theory and graph theory. Basically, directed unipartite graphs can be unambiguously dissected into Strongly Connected components (SCCs). SCCs are the largest possible subgroups of nodes connected so that all the nodes in a subgroup can be reached from all others following the directions of the links. In the case of RNs, we can define five types of SCCs which play different functional roles:
+
+- The **core** of the network is the SCC formed by the largest number of species. All species in the core must recruit, at least, in the vicinity of another core species, and allow the recruitment of at least another core species.
+
+- **Satellites** are non-core species that can be reached from some core species, following the direction of the arrows. For example, a satellite species is one that recruits in the vicinity of some core species but that does not show recruitment of any species in its vicinity.
+
+- **Disturbance-dependent transients** are species that can be reached from the open node but not from core or satellite species (i.e. for example, species that only recruit away from established plants).
+
+- **Strict transients** are species that cannot be reached from any other node (i.e. those that do not recruit in the studied local assemblage).
+
+Assuming that the dynamics of the system is linear and time-invariant (LTI dynamics), like in Markov models (Horn, 1975, Siles et al., 2008), only core and satellite species will persist in equilibrium in the absence of disturbance. This allows a dicotomic classification of nodes into persistent or transients, and can be determined by inspecting the dominant eigenvector of the adjacency matrix, which is actually the eigenvector centrality. However, when the dynamics are non-linear, this classification cannot be guaranteed to hold, but simulations have shown that the probability of persistence is higher and the time to extinction is longer for core and satellite than for transient species (Alcantara et al., 2017). The sum of core and satellite species is a qualitative approximation to the number of species that can potentially persist in the local community.
+
+The function **funtopol** provides summary information of the frequency of species of each functional role and the classification of species in each role.
+
+
+```{r}
+g <- funtopol(Ventisquero_RN)
+g$Descriptors
+g$Functional_classification[g$Functional_classification$group!="Strict_transients",]
+```
+
+
+"Assuming that the dynamics of the system is linear and time-invariant, the set of species persisting in equilibrium can be determined as follows: all the nodes in the core SCC and those reachable from them (satellites) will persist (in the sense that their abundance would never become exactly zero), and the rest (transients) will eventually become extinct.
+The species that could persist are: (all)
+"Acer_monspessulanum"     "Berberis_hispanica"      "Bupleurum_gibraltaricum" "Cistus_albidus"        "Crataegus_monogyna"      "Daphne_gnidium"          "Digitalis_obscura" "Dorycnium_pentaphyllum"  "Fraxinus_angustifolia"   "Helleborus_foetidus"     "Juniperus_oxycedrus"     "Juniperus_phoenicea"     "Lavandula_latifolia"     "Phillyrea_latifolia"    "Pinus_halepensis"        "Pistacia_terebinthus"    "Prunus_mahaleb"          "Prunus_spinosa"          "Quercus_coccifera"       "Quercus_faginea" "Quercus_ilex" "Rhamnus_alaternus"       "Rhamnus_lycioides"       "Rhamnus_myrtifolius"     "Rosa_sp1"                "Ruscus_aculeatus"        "Staehelina_dubia"        "Thymus_mastichina" "Thymus_orospedanus"      "Ulex_parviflorus" 
+
+
+
+You can explore the network using the function **visu_funtopol**. This function provides a graph representation of the recruitment network in html format made with package visNetwork. It is possible to zoom in the graph to see the nodes identities and to drag the nodes to different positions. A copy of the html graph will be stored in your working directory.
+
+```{r warning=FALSE, message=FALSE}
+visu_funtopol(Ventisquero_RN)
+```
+
+
+
+############################################################
+# 7.2. Out of all posible interactions, which of them actually occur
+#(i.e. does every species recruit under any other species)?
+############################################################
+
+## Network dimensions and connectance
+
+The size of a network can be described by the number of nodes (*N*) and links (*L*), and its complexity is proportional to network connectance. *C* can be estimated on different ways depending on the type of network, but it always measures the proportion of links relative to the maximum number of links that could be possible in the network. In the case of recruitment networks we use the formula $C = L /(N^2-N)$ since the node "Open" does not act as a recruit (i.e. Open is represented by a row of zeroes in the adjacency matrix).
+
+```{r}
+Ventisquero_RN <- comm_to_RN(Ventisquero_int, Ventisquero_cover)
+RN_dims(Ventisquero_RN)
+```
+
+For study sites sampled in multiple plots, we can use plot accumulation curves to assess whether our estimates of these dimensions are stable. The function cum_values does plot accumulation curves for parameters that can be obtained with package igraph. For example, for the number of nodes and links, and connectance we can use, respectively, the igraph functions "vcount", "ecount" and "edge_density". The function may take long time if *k* >> 100 (for speed, we will run this example with just 20 resamplings).
+
+```{r fig3, fig.height = 10, fig.asp = 1}
+p1 <- cum_values(Ventisquero_int2, vcount, 20, title = "Number of species")
+p2 <- cum_values(Ventisquero_int2, ecount, 20, title = "Number of interactions")
+p3 <-cum_values(Ventisquero_int2, edge_density, 20, title = "Connectance")
+gridExtra::grid.arrange(p1, p2, p3, nrow = 3)
+```
+
+Whith these results we can conclude that the estimate of connectance in this study is reliable and shows that out of all posible interactions, only around 22% of them actually occur.
+
+#####################################################################################
+#8. Questions that can be answered with Recruitment enhancement (facilitation) 
+#or recruitment depression (competition) interactions networks
+#####################################################################################
+
+#####################################################################################
+# 8.1. Is there some non-random pattern of interactions in the the observed facilitated and competition networks, such as nestedness?
+#(i.e. specialist species tend to interact with generalist species)?
+#####################################################################################
+
+```{r}
+
+# For facilitated networks
+library(vegan)
+Fac_nest<-nestednodf(Ventisquero_Fac_mat_bin, order = TRUE, weighted = FALSE, wbinary = FALSE)
+oecosimu(Ventisquero_Fac_mat_bin, nestednodf, "quasiswap")
+
+# For competition networks
+library(vegan)
+Comp_nest<-nestednodf(Ventisquero_comp_mat_bin, order = TRUE, weighted = FALSE, wbinary = FALSE)
+oecosimu(Ventisquero_comp_mat_bin, nestednodf, "quasiswap")
+
+```
+
+
+The pattern of interaction observed does not differ from the null model, so we can not conclude that the interactions are structured in a nested pattern.
